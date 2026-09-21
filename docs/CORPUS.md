@@ -1,12 +1,12 @@
 # Corpus Layout and `notes.json` Schema
 
-The renderer reads a read-only tab corpus shared with the other tools in this project.
-By default it looks at `RIPPER/bulk/songs` (resolved as `APP_DIR.parents[1]/bulk/songs`).
+The renderer reads a local tab corpus bundled inside this project. By default it looks at
+`corpus/songs` under the project root (override with the `RIFFER_CORPUS` env var).
 
 ## Directory layout
 
 ```
-bulk/songs/
+corpus/songs/
   <Artist>/
     <slug>/
       notes.json          # canonical flattened event stream (what the renderer reads)

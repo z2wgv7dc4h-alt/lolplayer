@@ -38,13 +38,21 @@ Ported from `riffer`, with asset/tool paths made configurable via `engine/assets
 | `fastsynth.py` | Persistent `libfluidsynth` via ctypes; renders non-guitar tracks from a soundfont. |
 | `synth.py` | Orchestration helpers: `_stem_tracks`, `_subsong`, `_sum_buses`, `find_soundfont`, `find_fluidsynth`, `category_of`. |
 
-### Asset/tool resolution (`assets.py`)
+### Path resolution (`assets.py`, `app.py`)
 
-`assets_root()` returns `RIFFER_ASSETS` if set, else `<repo>/assets`. `tools_root()`
-returns `RIFFER_TOOLS` if set, else `<repo>/tools`. `app.py` detects a valid root
-(`RIFFER_ASSETS` env, then `APP_DIR/assets`, then `~/Desktop/god-tier-metal/assets`,
-probed on `di/`; tools probed on `fluidsynth/`) and exports it via `os.environ` **before**
-importing the engine modules (which read the paths at import time).
+The project is **self-contained**: corpus, assets and tools all live inside the project
+folder. `app.py` resolves everything against `APP_DIR` unless an env override is set, and
+exports the roots via `os.environ` **before** importing the engine modules (which read the
+paths at import time):
+
+| Value | Env override | Default |
+| --- | --- | --- |
+| corpus | `RIFFER_CORPUS` | `APP_DIR/corpus/songs` |
+| assets | `RIFFER_ASSETS` | `APP_DIR/assets` |
+| tools | `RIFFER_TOOLS` | `APP_DIR/tools` |
+
+`assets_root()` / `tools_root()` in `engine/assets.py` read `RIFFER_ASSETS` /
+`RIFFER_TOOLS`, falling back to `<repo>/assets` and `<repo>/tools`.
 
 ### Timing
 

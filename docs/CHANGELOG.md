@@ -2,6 +2,25 @@
 
 All notable changes to the Riffer Renderer app are recorded here.
 
+## 2026-09-21 (standalone project)
+
+### Changed
+- The project moved out of `Downloads\RIPPER\TEST GEN\Test` to
+  `C:\Users\RIGGUSPIG\Desktop\riffer-renderer` and is now **self-contained**: it carries
+  its own `corpus/` (474 songs), `assets/` (di, drums, nam, cab) and `tools/`
+  (fluidsynth, soundfonts, `fetch_tones.py`).
+- `CORPUS_ROOT` is now `RIFFER_CORPUS` env or `APP_DIR/corpus/songs` (no longer derived
+  from the RIPPER tree). `ASSETS_DIR`/`TOOLS_DIR` resolve to `APP_DIR/assets` and
+  `APP_DIR/tools` only.
+- `.gitignore` now excludes `corpus/`, `assets/di/`, `tools/fluidsynth/` and
+  `tools/soundfonts/`.
+
+### Removed
+- The five stale `.nam` test captures (`A2`, `lstm`, `slimmable_wavenet`, `wavenet`,
+  `wavenet_a1_standard`) that could not load and cluttered the dropdown.
+- Writes we had made into `god-tier-metal/assets` were reverted (its `nam`/`cab` are back
+  to the original 2/5).
+
 ## 2026-09-21 (pedalboard master + TONE3000 fetcher)
 
 ### Added

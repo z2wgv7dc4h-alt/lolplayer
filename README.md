@@ -10,7 +10,7 @@ Single-process Flask + Socket.IO app. The synthesis engine lives in `engine/`.
 
 ## What it does
 
-- Scans a shared, read-only tab corpus and lists every song (artist / title).
+- Scans the bundled tab corpus and lists every song (artist / title).
 - Loads each song's flattened `notes.json` event stream (tracks, tunings, tempo map,
   articulation).
 - Renders a **stem mix**:
@@ -116,19 +116,24 @@ elsewhere. The engine reads them via `engine/assets.py`.
 
 ## Assets
 
-`assets/nam/*.nam`, cab IRs, DI samples and the drum samples are **not** committed — they
-are licensed per-capture / per-library and must be supplied by you. Layout:
+This project is **self-contained**: the corpus, engine assets and tools live inside the
+project folder (and are gitignored, since they're large or licensed per-capture /
+per-library). Layout:
 
 ```
+corpus/songs/                            tab corpus (Artist/slug/notes.json)
 assets/
-  di/      <Note>_s<string>_<take>.wav        dry DI guitar samples
+  di/      <Note>_s<string>_<take>.wav   dry DI guitar samples
   drums/   <midi>-<kit><instrument>-<take>.wav
-  nam/     *.nam                              amp captures
-  cab/     *.wav                              cabinet impulse responses
+  nam/     *.nam                         amp captures
+  cab/     *.wav                         cabinet impulse responses
 tools/
   fluidsynth/bin/libfluidsynth-3.dll
   soundfonts/MuseScore_General.sf3
+  fetch_tones.py                         TONE3000 downloader
 ```
+
+Override the roots with `RIFFER_CORPUS` / `RIFFER_ASSETS` / `RIFFER_TOOLS` if needed.
 
 If a stage's assets are missing the renderer degrades gracefully (e.g. no DI -> guitars
 fall back to the soundfont; no drums -> no drum bus; nothing at all -> a test tone).

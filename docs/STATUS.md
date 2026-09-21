@@ -3,6 +3,9 @@
 Last verified: 2026-09-21, by importing and running `app.py` in the development venv
 (Python 3.12.10, Windows, RTX 5080, driver 616.64 / CUDA 13.4 UMD).
 
+Project location: `C:\Users\RIGGUSPIG\Desktop\riffer-renderer` (self-contained — its own
+`corpus/`, `assets/`, `tools/`; no dependency on other projects).
+
 > Startup note: Flask binds quickly, but the first page request triggers the
 > `torch`/CUDA engine-status check (~30 s). See [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 > if the page doesn't come up — a stale `python app.py` may already own port 5000.
@@ -11,9 +14,9 @@ Last verified: 2026-09-21, by importing and running `app.py` in the development 
 
 | Area | Evidence |
 | --- | --- |
-| Corpus discovery | `load_songs()` returned **343** songs from `RIPPER/bulk/songs`. |
-| Engine detection | `_engine_status()`: DI on (19 samples), drums on (29 pitches), NAM on (2 captures), synth on (MuseScore soundfont + libfluidsynth). |
-| Assets auto-detection | `ASSETS_DIR` = `~/Desktop/god-tier-metal/assets`, `TOOLS_DIR` = `~/Desktop/god-tier-metal/tools`. |
+| Corpus discovery | `load_songs()` returned **343** songs from the local `corpus/songs`. |
+| Engine detection | `_engine_status()`: DI on (19 samples), drums on (29 pitches), NAM on (6 captures), synth on (MuseScore soundfont + libfluidsynth). |
+| Paths self-contained | `CORPUS_ROOT` = `...\riffer-renderer\corpus\songs`, `ASSETS_DIR` = `...\riffer-renderer\assets`, `TOOLS_DIR` = `...\riffer-renderer\tools`. |
 | Track mapping | Channels `[0..8]`, drums -> 9; GM program clamped; lead/rhythm guitar + bass + drums parsed. |
 | Full stem render | Guitar + bass + drums song (854 events) rendered to stereo `(2382778, 2)` in 8.0 s, non-silent, peak 0.95. |
 | Expression data | Sample song: 6 bend events, 170 palm-mute events detected and applied. |
@@ -25,8 +28,9 @@ Last verified: 2026-09-21, by importing and running `app.py` in the development 
 | Boost stage | DI centroid 1341 Hz -> boost 2319 Hz; NAM no-boost 2585 Hz -> NAM+boost 2737 Hz (added harmonics). |
 | Gate + mix staging | `noise_gate` changes the DI; mix peak 0.765 under the 0.95 limiter ceiling, finite. |
 | Master glue (pedalboard) | `_HAVE_PEDALBOARD` True; `master_glue` output peak 0.923, finite. |
-| TONE3000 fetcher | `tools/fetch_tones.py --help` runs; downloads require a user API key. |
-| Running server | `GET /` -> `200`, 44,168 bytes, 354 options, footer `engine: DI=on drums=on NAM=on synth=on` on `127.0.0.1:5000`. |
+| TONE3000 fetcher | `tools/fetch_tones.py` downloaded **4 NAM captures + 4 cab IRs** with a real key; a new capture loads on CUDA and outputs the correct pitch. |
+| Amp/cab library | 6 `.nam` captures (2 heads + 4 full-rig) and 9 cab IRs; 5 junk test captures removed. |
+| Running server | `GET /` -> `200`, 367 options, footer `engine: DI=on drums=on NAM=on synth=on`, served from `...\riffer-renderer` on `127.0.0.1:5000`. |
 | NAM on CUDA | `namamp.device()` = `cuda`; full 52.4 s guitar part rendered in **10.7 s** (~5x realtime) on the 5080. |
 | Numpy amp fallback | Same excerpt with `use_nam=False` in 0.5 s; output differs from NAM. |
 | End-to-end render | Socket.IO test client produced a 9.5 MB WAV in `out/`. |
