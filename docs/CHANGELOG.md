@@ -2,6 +2,19 @@
 
 All notable changes to the Riffer Renderer app are recorded here.
 
+## 2026-09-21 (pedalboard master + TONE3000 fetcher)
+
+### Added
+- `pedalboard` (Spotify, GPLv3) master chain: `tone.master_glue` runs a high-pass, a
+  glue compressor and a limiter, with the numpy `master_limit` as fallback.
+  `mix_buses` now uses it.
+- `tools/fetch_tones.py`: download NAM captures / IRs from TONE3000 using the user's own
+  account API key (`TONE3000_API_KEY`), into `assets/nam` and `assets/cab`.
+- `docs`: README documents the tool and the requirement.
+
+### Changed
+- `requirements.txt` adds `pedalboard==0.9.25`.
+
 ## 2026-09-21 (tone: boost, gate, mix staging)
 
 ### Added

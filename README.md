@@ -24,8 +24,9 @@ Single-process Flask + Socket.IO app. The synthesis engine lives in `engine/`.
   - **Bass** — rendered from the soundfont, then run through a bass amp/cab stage.
   - **Everything else** (keys, ...) — FluidSynth via `libfluidsynth`, loaded once per
     process with a soundfont.
-- **Gain staging + master limiter** — buses are summed at fixed relative gains and
-  limited to -0.5 dBFS (no more independent per-bus peak-normalizing).
+- **Gain staging + master glue** — buses are summed at fixed relative gains, then a
+  master chain (high-pass + glue compressor + limiter via `pedalboard`, with a numpy
+  fallback) limits to -0.5 dBFS (no more independent per-bus peak-normalizing).
 - **Preview renders** — limit a render to the first 30/45/60 s to hear a result quickly.
 - Uses **CUDA** automatically for the NAM stage when a CUDA-enabled torch is installed.
 - Serves audio over HTTP with byte-range support so the browser player can seek.
@@ -49,7 +50,7 @@ and render smoke tests. Some tests skip cleanly when no corpus/assets are presen
 Python packages — see [requirements.txt](requirements.txt). Key ones:
 
 ```
-Flask, Flask-SocketIO, numpy, soundfile, scipy, mido
+Flask, Flask-SocketIO, numpy, soundfile, scipy, mido, pedalboard
 torch + neural-amp-modeler   # NAM amp stage
 ```
 
@@ -130,6 +131,23 @@ tools/
 
 If a stage's assets are missing the renderer degrades gracefully (e.g. no DI -> guitars
 fall back to the soundfont; no drums -> no drum bus; nothing at all -> a test tone).
+
+## Getting more tones (TONE3000)
+
+The only two captures shipped here are "noboost". For real djent/tech-death tones, pull
+high-gain captures and cab IRs from [TONE3000](https://www.tone3000.com) with your own
+account key (create one at `tone3000.com/settings`; the key is a secret — never commit
+it):
+
+```powershell
+$env:TONE3000_API_KEY = "t3k_cs_..."
+.\venv\Scripts\python.exe tools\fetch_tones.py search   --query "6505 high gain" --format nam
+.\venv\Scripts\python.exe tools\fetch_tones.py download --query "6505 high gain" --format nam --limit 3
+.\venv\Scripts\python.exe tools\fetch_tones.py download --query "v30 sm57"       --format ir  --limit 3
+```
+
+Files land in `assets/nam/` and `assets/cab/` and show up in the UI dropdowns on the
+next page load. Downloads use the TONE3000 API and are subject to their API terms.
 
 ## Limitations
 

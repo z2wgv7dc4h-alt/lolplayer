@@ -4,6 +4,7 @@ numpy==2.5.3
 soundfile==0.14.0
 scipy==1.18.1
 mido==1.3.3
+pedalboard==0.9.25
 neural-amp-modeler==0.13.0
 # For NAM on CPU install torch from PyPI; for GPU use the CUDA index instead:
 #   pip install --upgrade torch --index-url https://download.pytorch.org/whl/cu130

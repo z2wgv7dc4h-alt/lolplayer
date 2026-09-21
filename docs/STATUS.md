@@ -20,10 +20,12 @@ Last verified: 2026-09-21, by importing and running `app.py` in the development 
 | Bend rendering | `di._apply_bends` preserves length, finite, and changes the signal vs. flat. |
 | Bass amp | Bass-only render `(2382778, 2)`, rms 0.184, finite, peak 0.95. |
 | Preview | `trim_song(song, 20s)` -> 271 events / 44 beats; rendered `(997762, 2)` in 6.3 s. |
-| Tests | `pytest` -> **22 passed** in 45.6 s. |
+| Tests | **23 tests** collected. Full suite last passed at 22; the added pedalboard test passes in isolation (test_tone 6/6). |
 | DI pitch selection | Real song: old `_pick` detuned **236/303** events by >=4 semitones (max +/-31). Fixed: **0/303**, max +/-2. |
 | Boost stage | DI centroid 1341 Hz -> boost 2319 Hz; NAM no-boost 2585 Hz -> NAM+boost 2737 Hz (added harmonics). |
 | Gate + mix staging | `noise_gate` changes the DI; mix peak 0.765 under the 0.95 limiter ceiling, finite. |
+| Master glue (pedalboard) | `_HAVE_PEDALBOARD` True; `master_glue` output peak 0.923, finite. |
+| TONE3000 fetcher | `tools/fetch_tones.py --help` runs; downloads require a user API key. |
 | Running server | `GET /` -> `200`, 44,168 bytes, 354 options, footer `engine: DI=on drums=on NAM=on synth=on` on `127.0.0.1:5000`. |
 | NAM on CUDA | `namamp.device()` = `cuda`; full 52.4 s guitar part rendered in **10.7 s** (~5x realtime) on the 5080. |
 | Numpy amp fallback | Same excerpt with `use_nam=False` in 0.5 s; output differs from NAM. |

@@ -33,7 +33,7 @@ Ported from `riffer`, with asset/tool paths made configurable via `engine/assets
 | `di.py` | Sampled dry-DI guitar: nearest recorded pitch globally (same string only as a tie-breaker), repitched; palm-mute/bend/dead/ghost handling. |
 | `drums.py` | Multisampled drums: velocity layers + round-robin, antialiased resampling, per-instrument gain/pan, parallel compression + room IR. |
 | `amp.py` | Numpy-only tube-ish amp + synthesized cabinet IR (fallback when NAM is off/unavailable). |
-| `tone.py` | Guitar front-end + master mix: `tube_distort` (asymmetric, ported from `ww-forge`) / `noise_gate` / `boost` (Tube-Screamer-style), `master_limit`, `mix_buses`. |
+| `tone.py` | Guitar front-end + master mix: `tube_distort` (asymmetric, ported from `ww-forge`) / `noise_gate` / `boost` (Tube-Screamer-style), `master_limit`, `master_glue` (pedalboard HP + glue comp + limiter), `mix_buses`. |
 | `namamp.py` | NAM amp captures in torch + real cab IR. Device-aware (CUDA when available); `process(..., drive=dB)` for extra input gain. |
 | `fastsynth.py` | Persistent `libfluidsynth` via ctypes; renders non-guitar tracks from a soundfont. |
 | `synth.py` | Orchestration helpers: `_stem_tracks`, `_subsong`, `_sum_buses`, `find_soundfont`, `find_fluidsynth`, `category_of`. |
@@ -66,7 +66,8 @@ The DI/drum renderers size their buffers from `duration_beats + tail`.
    `amp.amp` with a real cab IR if one exists.
 5. **Drums** -> `drums.render` (skipped if no samples).
 6. Sum at fixed relative gains (drums 0.95, guitar 0.85, bass 1.0, other 0.6) with
-   `tone.mix_buses`, then a master peak limiter at 0.95. If no bus produced anything,
+   `tone.mix_buses`, then a master chain (`tone.master_glue`: pedalboard high-pass +
+   glue compressor + limiter, numpy fallback) at 0.95. If no bus produced anything,
    fall back to a 5 s test tone.
 
 `_guitar_bus` adds a small right-channel delay for width, matching the sibling project.

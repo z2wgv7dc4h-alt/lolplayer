@@ -1,6 +1,6 @@
 import numpy as np
 
-from tone import boost, master_limit, mix_buses, noise_gate, tube_distort
+from tone import boost, master_glue, master_limit, mix_buses, noise_gate, tube_distort
 
 
 def test_tube_distort_bounded_and_asymmetric():
@@ -33,6 +33,15 @@ def test_master_limit_respects_ceiling():
     x = (np.random.default_rng(0).standard_normal((sr, 2)) * 5).astype(np.float32)
     y = master_limit(x, sr=sr, ceiling=0.9)
     assert float(np.max(np.abs(y))) <= 0.9 + 1e-6
+
+
+def test_master_glue_bounded():
+    sr = 44100
+    x = (np.random.default_rng(0).standard_normal((sr, 2)) * 0.3).astype(np.float32)
+    y = master_glue(x, sr=sr, ceiling=0.95)
+    assert y.shape == (sr, 2)
+    assert np.isfinite(y).all()
+    assert float(np.max(np.abs(y))) <= 0.96
 
 
 def test_mix_buses_shapes_and_gains():

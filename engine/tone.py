@@ -14,6 +14,25 @@ from scipy.signal import lfilter
 
 from amp import _hp, _lp, _peak
 
+try:
+    from pedalboard import Compressor, HighpassFilter, Limiter, Pedalboard
+    _HAVE_PEDALBOARD = True
+except Exception:  # noqa: BLE001
+    _HAVE_PEDALBOARD = False
+
+_MASTER_BOARD = None
+
+
+def _master_board():
+    global _MASTER_BOARD
+    if _MASTER_BOARD is None and _HAVE_PEDALBOARD:
+        _MASTER_BOARD = Pedalboard([
+            HighpassFilter(cutoff_frequency_hz=28.0),
+            Compressor(threshold_db=-18.0, ratio=2.5),
+            Limiter(threshold_db=-1.0),
+        ])
+    return _MASTER_BOARD
+
 
 def tube_distort(x: np.ndarray, drive: float = 8.0,
                  asymmetry: float = 0.3) -> np.ndarray:
@@ -67,8 +86,24 @@ def master_limit(x: np.ndarray, sr: int = 44100, ceiling: float = 0.95,
     return out.astype(np.float32)
 
 
+def master_glue(x: np.ndarray, sr: int = 44100, ceiling: float = 0.95) -> np.ndarray:
+    """Master bus: high-pass + gentle glue compression + limiter (pedalboard),
+    falling back to the numpy limiter when pedalboard is unavailable."""
+    x = np.asarray(x, dtype=np.float32)
+    if x.ndim == 1:
+        x = x[:, None]
+    board = _master_board()
+    if board is None:
+        return master_limit(x, sr=sr, ceiling=ceiling)
+    y = np.asarray(board(x, sr), dtype=np.float32)
+    peak = float(np.max(np.abs(y)) + 1e-9)
+    if peak > ceiling:
+        y = y * (ceiling / peak)
+    return y.astype(np.float32)
+
+
 def mix_buses(buses, gains, sr: int = 44100, ceiling: float = 0.95) -> np.ndarray:
-    """Sum pre-rendered buses at fixed relative gains, then limit."""
+    """Sum pre-rendered buses at fixed relative gains, then master-glue."""
     n = max((len(b) for b in buses), default=0)
     if n == 0:
         return np.zeros((1, 2), dtype=np.float32)
@@ -78,4 +113,4 @@ def mix_buses(buses, gains, sr: int = 44100, ceiling: float = 0.95) -> np.ndarra
             continue
         b = bus if bus.ndim > 1 else np.repeat(bus[:, None], 2, axis=1)
         out[:len(b)] += b * gain
-    return master_limit(out, sr=sr, ceiling=ceiling)
+    return master_glue(out, sr=sr, ceiling=ceiling)
