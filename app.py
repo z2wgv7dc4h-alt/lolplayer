@@ -426,14 +426,16 @@ def index():
         )
         for s in songs
     )
-    amp_opts = ''.join(
-        '<option value="{v}">{v}</option>'.format(v=html.escape(a, quote=True))
-        for a in eng['amps']
-    )
-    cab_opts = ''.join(
-        '<option value="{v}">{v}</option>'.format(v=html.escape(c, quote=True))
-        for c in eng['cabs']
-    )
+    def _opts(names, default_sub):
+        return ''.join(
+            '<option value="{v}"{sel}>{v}</option>'.format(
+                v=html.escape(n, quote=True),
+                sel=' selected' if default_sub and default_sub in n else '')
+            for n in names
+        )
+
+    amp_opts = _opts(eng['amps'], "FR 6505 1992 Ld - 1")
+    cab_opts = _opts(eng['cabs'], "4x12-sm57-1in-1c.wav")
     status = (
         f"engine: DI={'on' if eng['di'] else 'off'} "
         f"drums={'on' if eng['drums'] else 'off'} "
@@ -467,7 +469,7 @@ def index():
             <select id="songSelect">__SONG_OPTS__</select>
         </div>
         <div>
-            <label class="inline"><input type="checkbox" id="useNam"> NAM amp (slow)</label>
+            <label class="inline"><input type="checkbox" id="useNam" checked> NAM amp (slow)</label>
             <label class="inline"><input type="checkbox" id="boost" checked> Boost (overdrive)</label>
             <select id="ampSelect">__AMP_OPTS__</select>
             <select id="cabSelect">__CAB_OPTS__</select>

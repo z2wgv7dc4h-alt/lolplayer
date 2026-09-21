@@ -2,6 +2,18 @@
 
 All notable changes to the Riffer Renderer app are recorded here.
 
+## 2026-09-21 (dynamics pass)
+
+### Changed
+- **Removed the master glue compressor.** `tone.master_glue` is now just high-pass +
+  limiter, so the mix keeps its dynamics instead of being squashed into a flat wall.
+  On a 30 s preview, crest factor went **4.2 -> 10.3** and per-4 s loudness now varies
+  (0.07-0.19 instead of a constant ~0.16).
+- **Tighter guitar:** `di.py` shortens palm-muted notes (x0.6) and reduces the release
+  tails (palm 15 ms, open 60 ms) so chugs stop ringing into each other.
+- **UI defaults:** opens on the high-gain full-rig capture
+  (`FR 6505 1992 Ld - 1`) + `4x12-sm57-1in-1c.wav`, with **NAM** and **Boost** ticked.
+
 ## 2026-09-21 (standalone project)
 
 ### Changed

@@ -15,7 +15,7 @@ from scipy.signal import lfilter
 from amp import _hp, _lp, _peak
 
 try:
-    from pedalboard import Compressor, HighpassFilter, Limiter, Pedalboard
+    from pedalboard import HighpassFilter, Limiter, Pedalboard
     _HAVE_PEDALBOARD = True
 except Exception:  # noqa: BLE001
     _HAVE_PEDALBOARD = False
@@ -28,7 +28,6 @@ def _master_board():
     if _MASTER_BOARD is None and _HAVE_PEDALBOARD:
         _MASTER_BOARD = Pedalboard([
             HighpassFilter(cutoff_frequency_hz=28.0),
-            Compressor(threshold_db=-18.0, ratio=2.5),
             Limiter(threshold_db=-1.0),
         ])
     return _MASTER_BOARD

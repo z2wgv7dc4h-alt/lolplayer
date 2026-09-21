@@ -185,7 +185,12 @@ def _render(song: Song, points, rate: int, gain: float, start_sec: float,
                 amp *= 0.8
                 sample = _lowpass(sample, rate, 1500)
             note_sec = e.duration_beats * (60.0 / max(1e-6, e.tempo))
-            hold = int((note_sec + (0.05 if e.palm_mute else 0.12)) * rate)
+            if e.palm_mute:
+                note_sec *= 0.6
+                tail = 0.015
+            else:
+                tail = 0.06
+            hold = int((note_sec + tail) * rate)
             if 0 < hold < len(sample):
                 sample = sample[:hold].copy()
                 fade = min(int(0.012 * rate), len(sample))
