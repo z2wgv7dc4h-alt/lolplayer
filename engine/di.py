@@ -16,7 +16,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import soundfile as sf
-from scipy.signal import resample_poly
+from scipy.signal import butter, resample_poly, sosfilt
 
 from assets import assets_root
 from midi import beat_to_seconds, tempo_points
@@ -101,6 +101,30 @@ def _repitch(x: np.ndarray, semitones: float) -> np.ndarray:
     return resample_poly(x, fr.numerator, fr.denominator).astype(np.float32)
 
 
+def _lowpass(x: np.ndarray, rate: int, cutoff: float) -> np.ndarray:
+    sos = butter(2, min(cutoff, rate / 2 - 1) / (rate / 2), btype="low",
+                 output="sos")
+    return sosfilt(sos, x).astype(np.float32)
+
+
+def _apply_bends(sample: np.ndarray, bends) -> np.ndarray:
+    """Warp the sample to follow a bend contour (position in 1/60 beat, tone in
+    cents); implemented as a time-varying resample read position."""
+    points = sorted((max(0.0, float(p)), float(t)) for p, t in bends)
+    if not points or len(sample) == 0:
+        return sample
+    fracs = [0.0] + [min(1.0, p / 60.0) for p, _t in points]
+    semis = [0.0] + [t / 100.0 for _p, t in points]
+    n = len(sample)
+    grid = np.linspace(0.0, 1.0, n, dtype=np.float32)
+    contour = np.interp(grid, fracs, semis).astype(np.float32)
+    ratio = (2.0 ** (contour / 12.0)).astype(np.float32)
+    pos = np.cumsum(ratio)
+    pos -= pos[0]
+    idx = np.arange(n, dtype=np.float32)
+    return np.interp(pos, idx, sample, left=0.0, right=0.0).astype(np.float32)
+
+
 def render(song: Song, rate: int = 22050, gain: float = 0.5,
            track_indices=None) -> Optional[np.ndarray]:
     if not available():
@@ -129,7 +153,7 @@ def _render(song: Song, points, rate: int, gain: float, start_sec: float,
     buf = np.zeros(length, dtype=np.float32)
     end_sec = start_sec + length / rate
     for e in song.events:
-        if e.track not in track_indices or e.dead:
+        if e.track not in track_indices:
             continue
         sec = beat_to_seconds(e.onset_beat, points)
         if sec < start_sec - 0.05 or sec >= end_sec:
@@ -141,15 +165,33 @@ def _render(song: Song, points, rate: int, gain: float, start_sec: float,
         sample = _repitch(_load(path, rate), e.pitch - key)
         vel = max(1, min(127, e.velocity)) / 127.0
         amp = gain * (vel ** 1.3)
-        if e.palm_mute:
-            amp *= 0.8
-        note_sec = e.duration_beats * (60.0 / max(1e-6, e.tempo))
-        hold = int((note_sec + (0.05 if e.palm_mute else 0.12)) * rate)
-        if 0 < hold < len(sample):
-            sample = sample[:hold].copy()
-            fade = min(int(0.012 * rate), len(sample))
+        if e.ghost:
+            amp *= 0.6
+        if e.hammer:
+            amp *= 0.82
+        if e.dead:
+            amp *= 0.5
+            hold = int(0.08 * rate)
+            if 0 < hold < len(sample):
+                sample = _lowpass(sample[:hold].copy(), rate, 900)
+            fade = min(int(0.01 * rate), len(sample))
             if fade > 1:
                 sample[-fade:] *= np.linspace(1.0, 0.0, fade, dtype=np.float32)
+        else:
+            if e.palm_mute:
+                amp *= 0.8
+                sample = _lowpass(sample, rate, 1500)
+            note_sec = e.duration_beats * (60.0 / max(1e-6, e.tempo))
+            hold = int((note_sec + (0.05 if e.palm_mute else 0.12)) * rate)
+            if 0 < hold < len(sample):
+                sample = sample[:hold].copy()
+                fade = min(int(0.012 * rate), len(sample))
+                if fade > 1:
+                    sample[-fade:] *= np.linspace(1.0, 0.0, fade, dtype=np.float32)
+            if getattr(e, "bends", None):
+                sample = _apply_bends(sample, e.bends)
+        if getattr(e, "staccato", False):
+            sample = sample[:int(len(sample) * 0.5)]
         start = int((sec - start_sec) * rate)
         if start < 0:
             sample = sample[-start:]

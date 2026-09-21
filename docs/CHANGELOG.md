@@ -2,6 +2,24 @@
 
 All notable changes to the Riffer Renderer app are recorded here.
 
+## 2026-09-21 (expression, bass, preview, tests)
+
+### Added
+- Expression rendering: `_attach_expression` pulls bend curves + staccato/accent from
+  `raw/song.json`; `di.py` applies bends (`_apply_bends`, time-varying resampling),
+  palm-mute (low-pass + shorter hold), dead notes (short low-passed chug), ghost/hammer
+  gain shaping and staccato.
+- Bass amp stage: `amp.bass_amp` + `amp.bass_cabinet_ir`, wired via `_bass_bus`; bass is
+  split out of the "others" bus and run through it.
+- Preview renders: a UI **Length** control trims the song to the first 30/45/60 s
+  (`synth.trim_song`).
+- `tests/` pytest suite (15 tests): security/traversal, corpus load, tempo map, bend
+  rendering, render smoke tests. `pytest.ini`, `requirements-dev.txt`.
+
+### Changed
+- `render_song` now splits non-guitar/non-drum tracks into bass and other buses.
+- UI gains a Length selector; README/ARCHITECTURE/STATUS updated.
+
 ## 2026-09-21 (engine integration)
 
 ### Added

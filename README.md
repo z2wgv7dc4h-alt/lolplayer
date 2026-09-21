@@ -18,10 +18,24 @@ Single-process Flask + Socket.IO app. The synthesis engine lives in `engine/`.
     per-instrument gain/pan, parallel compression + short room.
   - **Guitar** — sampled dry DI from `assets/di/` (nearest sample, repitched) through
     either a **NAM** capture + real cab IR, or a built-in numpy amp/cab when NAM is off.
-  - **Everything else** (bass, keys, ...) — FluidSynth via `libfluidsynth`, loaded once
-    per process with a soundfont.
+    Applies **expression**: bends (from `raw/song.json`), palm-mute, dead/ghost/hammer
+    notes and staccato.
+  - **Bass** — rendered from the soundfont, then run through a bass amp/cab stage.
+  - **Everything else** (keys, ...) — FluidSynth via `libfluidsynth`, loaded once per
+    process with a soundfont.
+- **Preview renders** — limit a render to the first 30/45/60 s to hear a result quickly.
 - Uses **CUDA** automatically for the NAM stage when a CUDA-enabled torch is installed.
 - Serves audio over HTTP with byte-range support so the browser player can seek.
+
+## Tests
+
+```powershell
+pip install -r requirements-dev.txt
+.\venv\Scripts\python.exe -m pytest
+```
+
+Covers path-traversal guards, corpus discovery/loading, the tempo map, bend rendering,
+and render smoke tests. Some tests skip cleanly when no corpus/assets are present.
 
 ## Requirements
 
@@ -85,7 +99,8 @@ engine reads them via `engine/assets.py`.
 1. Choose a song.
 2. Optionally tick **NAM amp (slow)** and pick an amp capture + cab IR.
 3. Set **Drive** (amp gain into the distortion) and **Gain** (bus level).
-4. **Render**. The button disables while the queued job runs; the waveform loads on
+4. Pick a **Length** (full song or a first-N-seconds preview).
+5. **Render**. The button disables while the queued job runs; the waveform loads on
    completion. The footer shows which engine stages are available.
 
 ## Assets
@@ -111,9 +126,11 @@ fall back to the soundfont; no drums -> no drum bus; nothing at all -> a test to
 
 - NAM is CPU-bound unless a CUDA torch is installed; the full song is still serialized
   through one worker thread.
-- Guitar is a sampler (nearest DI sample repitched), not a physical model.
-- Render request queue is unbounded; large songs are processed one at a time.
-- No automated tests yet.
+- Guitar is a sampler (nearest DI sample repitched), not a physical model. Bends are
+  applied by time-varying resampling; slides/vibrato are not yet rendered.
+- Preview trims by seconds up to the first note after the cut; it is not a streaming
+  player.
+- No Reaper/VST layer or tab/notation export (see `docs/STATUS.md`).
 
 ## Documentation
 

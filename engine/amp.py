@@ -56,3 +56,29 @@ def amp(di: np.ndarray, sr: int, drive: float = 14.0,
         x = 0.65 * x + 1.6 * wet
     peak = float(np.max(np.abs(x)) + 1e-9)
     return (x / peak * 0.9).astype(np.float32)
+
+
+def bass_cabinet_ir(sr: int, seed: int = 1, seconds: float = 0.06) -> np.ndarray:
+    n = max(64, int(sr * seconds))
+    rng = np.random.default_rng(seed)
+    ir = rng.standard_normal(n).astype(np.float32) * np.exp(-18.0 * np.linspace(0, 1, n))
+    ir = _hp(ir, sr, 45)
+    ir = _lp(ir, sr, 3500)
+    ir = _peak(ir, sr, 900, 1.0, 3.0)
+    return (ir / (np.max(np.abs(ir)) + 1e-9)).astype(np.float32)
+
+
+def bass_amp(di: np.ndarray, sr: int, drive: float = 5.0,
+             cab: np.ndarray | None = None) -> np.ndarray:
+    """Clean low-end source -> driven, low-passed bass (float32, peak <= 1)."""
+    x = di.astype(np.float32).copy()
+    x = _hp(x, sr, 38)
+    x = np.tanh(x * drive)
+    x = _lp(x, sr, 4000)
+    x = _peak(x, sr, 110, 0.8, 4.0)              # low thump
+    x = _peak(x, sr, 900, 1.1, -2.0)             # tame mids
+    if cab is not None:
+        wet = fftconvolve(x, cab)[:len(x)]
+        x = 0.7 * x + 1.2 * wet
+    peak = float(np.max(np.abs(x)) + 1e-9)
+    return (x / peak * 0.9).astype(np.float32)

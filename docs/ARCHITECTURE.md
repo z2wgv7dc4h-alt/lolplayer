@@ -54,16 +54,33 @@ The DI/drum renderers size their buffers from `duration_beats + tail`.
 ### Rendering (`app.render_song`)
 
 1. Split tracks into drums / guitars / others via `synth._stem_tracks`
-   (`category_of`: 24-31 = guitar, 32-39 = bass, 0-7 = keys).
+   (`category_of`: 24-31 = guitar, 32-39 = bass, 0-7 = keys). `others` is further split
+   into `bass` and the rest.
 2. **Others** -> `fastsynth.render_array` (skipped if libfluidsynth/soundfont absent).
-3. **Guitars** -> `di.render` (dry DI). If no DI assets, fall back to the soundfont.
+3. **Bass** -> `fastsynth.render_array`, then `_bass_bus` (bass amp + synthesized bass
+   cab, slight width).
+4. **Guitars** -> `di.render` (dry DI). If no DI assets, fall back to the soundfont.
    The DI goes through `_guitar_bus`, which runs NAM+cab when `use_nam`, else the numpy
    `amp.amp` with a real cab IR if one exists.
-4. **Drums** -> `drums.render` (skipped if no samples).
-5. Sum with `synth._sum_buses` (normalizes to 0.95 peak). If no bus produced anything,
+5. **Drums** -> `drums.render` (skipped if no samples).
+6. Sum with `synth._sum_buses` (normalizes to 0.95 peak). If no bus produced anything,
    fall back to a 5 s test tone.
 
 `_guitar_bus` adds a small right-channel delay for width, matching the sibling project.
+
+### Expression (`app._attach_expression`, `engine/di.py`)
+
+`load_song` calls `_attach_expression`, which matches `raw/song.json` notes to events by
+`(track, measure, string, fret)` and attaches bend curves (`event.bends` as
+`(position, tone)` points) plus `staccato`/`accentuated`. `di._render` then applies:
+palm-mute (gain + low-pass + shorter hold), dead notes (short low-passed chug instead of
+a skipped note), ghost/hammer gain shaping, staccato shortening, and `di._apply_bends`
+(time-varying resample read position from the bend contour).
+
+### Preview
+
+The UI's **Length** control sends `preview` seconds. `worker_render` trims the song with
+`synth.trim_song(song, seconds)` before rendering.
 
 ### NAM device selection (`namamp.py`)
 
@@ -98,3 +115,10 @@ receive each other's audio.
 
 One worker thread -> renders are serialized. The queue is unbounded. The song-list cache
 is process-local and expires after 5 s.
+
+## Tests
+
+`tests/` (pytest, configured by `pytest.ini`) covers path-traversal guards and the audio
+route, corpus discovery/loading, the tempo map (`engine/midi.py`), bend rendering
+(`engine/di.py`), and render smoke tests (stereo, finite, fallbacks). Corpus-dependent
+tests skip cleanly when no corpus is present. Run with `pytest`.

@@ -3,6 +3,7 @@ from flask_socketio import SocketIO, emit
 import html
 import json
 import os
+from collections import defaultdict
 import queue
 import re
 import sys
@@ -199,6 +200,7 @@ def load_song(artist, slug):
         source=str(notes_json),
     )
     _attach_mix(song, song_dir)
+    _attach_expression(song, song_dir)
     return song
 
 
@@ -220,6 +222,41 @@ def _attach_mix(song, song_dir):
             track.volume = max(0.0, min(1.5, float(volume)))
         if isinstance(balance, (int, float)):
             track.balance = max(-1.0, min(1.0, float(balance)))
+
+
+def _attach_expression(song, song_dir):
+    raw = song_dir / "raw" / "song.json"
+    if not raw.exists():
+        return
+    try:
+        data = json.loads(raw.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return
+    raw_tracks = data.get("tracks") or []
+    if len(raw_tracks) != len(song.tracks):
+        return
+    queues = defaultdict(list)
+    for e in song.events:
+        queues[(e.track, e.measure, e.string, e.fret)].append(e)
+    for pos, tr in enumerate(raw_tracks):
+        for mi, measure in enumerate(tr.get("measures") or []):
+            for voice in measure.get("voices") or []:
+                for beat in voice.get("beats") or []:
+                    for note in beat.get("notes") or []:
+                        bucket = queues.get((pos, mi, note.get("string"), note.get("fret")))
+                        if not bucket:
+                            continue
+                        event = bucket.pop(0)
+                        bend = note.get("bend")
+                        if isinstance(bend, dict) and bend.get("points"):
+                            event.bends = [
+                                (float(p.get("position", 0.0)), float(p.get("tone", 0.0)))
+                                for p in bend["points"]
+                            ]
+                        if note.get("staccato"):
+                            event.staccato = True
+                        if note.get("accentuated"):
+                            event.accentuated = True
 
 
 def _guitar_bus(di_audio, rate, use_nam, amp_name, cab_name, drive):
@@ -246,6 +283,14 @@ def _guitar_bus(di_audio, rate, use_nam, amp_name, cab_name, drive):
     return np.stack([proc, right], axis=1).astype(np.float32)
 
 
+def _bass_bus(src, rate):
+    mono = src.mean(axis=1) if getattr(src, "ndim", 1) > 1 else src
+    proc = ampmod.bass_amp(mono, rate, drive=5.0, cab=ampmod.bass_cabinet_ir(rate))
+    delay = int(0.004 * rate)
+    right = np.concatenate([np.zeros(delay, dtype=np.float32), proc])[:len(proc)]
+    return np.stack([proc, right], axis=1).astype(np.float32)
+
+
 def _placeholder_tone(rate=44100):
     duration = 5
     t = np.linspace(0, duration, int(duration * rate), endpoint=False)
@@ -260,13 +305,26 @@ def render_song(song, rate=44100, use_nam=False, amp_name=None, cab_name=None,
     sf2 = synth.find_soundfont()
     can_synth = bool(fastsynth.available() and sf2)
     dtracks, gtracks, otracks = synth._stem_tracks(song)
+    bass_idx = {t.index for t in otracks if synth.category_of(t) == "bass"}
+    bass = [t for t in otracks if t.index in bass_idx]
+    other = [t for t in otracks if t.index not in bass_idx]
     buses = []
 
-    if otracks and can_synth:
+    if other and can_synth:
         try:
             buses.append(fastsynth.render_array(
-                synth._subsong(song, otracks), sf2, mix=False, rate=rate,
+                synth._subsong(song, other), sf2, mix=False, rate=rate,
                 gain=gain, normalize=False))
+        except Exception:
+            pass
+
+    if bass and can_synth:
+        try:
+            bbus = fastsynth.render_array(
+                synth._subsong(song, bass), sf2, mix=False, rate=rate,
+                gain=gain, normalize=False)
+            if bbus is not None and len(bbus):
+                buses.append(_bass_bus(bbus, rate))
         except Exception:
             pass
 
@@ -319,11 +377,14 @@ def worker_render():
             cab_name = params.get("cab_name")
             drive = float(params.get("drive") or 14.0)
             gain = float(params.get("gain") or 0.5)
+            preview = float(params.get("preview") or 0.0)
 
             song = load_song(artist, slug)
             if not song:
                 socketio.emit('render_error', {'error': 'Song not found'}, to=sid)
             else:
+                if preview > 0:
+                    song = synth.trim_song(song, preview)
                 audio, rate = render_song(song, rate=44100, use_nam=use_nam,
                                           amp_name=amp_name, cab_name=cab_name,
                                           drive=drive, gain=gain)
@@ -415,6 +476,15 @@ def index():
             <input type="range" id="gain" min="0.1" max="1" step="0.05" value="0.5"
                    oninput="document.getElementById('gainVal').textContent = this.value">
         </div>
+        <div>
+            <label>Length:</label>
+            <select id="previewSelect">
+                <option value="0">Full song</option>
+                <option value="30">First 30s</option>
+                <option value="45">First 45s</option>
+                <option value="60">First 60s</option>
+            </select>
+        </div>
         <button id="renderBtn" onclick="render()">Render</button>
         <button onclick="wavesurfer.playPause()">Play</button>
         <div id="engine">__ENGINE__</div>
@@ -446,7 +516,8 @@ def index():
                     amp_name: document.getElementById('ampSelect').value || null,
                     cab_name: document.getElementById('cabSelect').value || null,
                     drive: parseFloat(document.getElementById('drive').value),
-                    gain: parseFloat(document.getElementById('gain').value)
+                    gain: parseFloat(document.getElementById('gain').value),
+                    preview: parseFloat(document.getElementById('previewSelect').value)
                 });
             }
 
@@ -510,6 +581,7 @@ def on_render(data):
         'cab_name': data.get('cab_name') if isinstance(data.get('cab_name'), str) else None,
         'drive': data.get('drive'),
         'gain': data.get('gain'),
+        'preview': data.get('preview'),
         '_sid': request.sid,
     }
     render_queue.put(job)
