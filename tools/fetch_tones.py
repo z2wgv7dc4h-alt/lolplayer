@@ -64,10 +64,20 @@ def list_models(key: str, tone_id: int, architecture: str | None = None) -> list
     return data.get("data", [])
 
 
+def _assets_root() -> Path:
+    """Same resolution the app uses: RIFFER_ASSETS, else repo assets (if it has
+    di/ or nam/), else the god-tier-metal assets folder."""
+    env = os.environ.get("RIFFER_ASSETS")
+    if env:
+        return Path(env)
+    for cand in (ROOT / "assets", Path.home() / "Desktop" / "god-tier-metal" / "assets"):
+        if (cand / "di").exists() or (cand / "nam").exists():
+            return cand
+    return ROOT / "assets"
+
+
 def _dest_dir(fmt: str) -> Path:
-    if fmt == "ir":
-        return ROOT / "assets" / "cab"
-    return ROOT / "assets" / "nam"
+    return _assets_root() / ("cab" if fmt == "ir" else "nam")
 
 
 def _download(url: str, key: str, dest: Path) -> None:
@@ -133,7 +143,7 @@ def cmd_download(args) -> int:
             try:
                 _download(url, key, dest)
                 got += 1
-                print(f"  + {dest.relative_to(ROOT)}  ({tone.get('title', tid)})")
+                print(f"  + {dest}  ({tone.get('title', tid)})")
             except Exception as exc:  # noqa: BLE001
                 print(f"  ! {tone.get('title', tid)}: {exc}")
     print(f"\n{got} files downloaded")
