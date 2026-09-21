@@ -3,6 +3,10 @@
 Last verified: 2026-09-21, by importing and running `app.py` in the development venv
 (Python 3.12.10, Windows, RTX 5080, driver 616.64 / CUDA 13.4 UMD).
 
+> Startup note: a clean launch takes ~30 s to bind (torch + CUDA import before Flask
+> starts). See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) if the page doesn't come up —
+> a stale `python app.py` may already own port 5000.
+
 ## Verified working
 
 | Area | Evidence |
@@ -17,6 +21,7 @@ Last verified: 2026-09-21, by importing and running `app.py` in the development 
 | Bass amp | Bass-only render `(2382778, 2)`, rms 0.184, finite, peak 0.95. |
 | Preview | `trim_song(song, 20s)` -> 271 events / 44 beats; rendered `(997762, 2)` in 6.3 s. |
 | Tests | `pytest` -> **15 passed** in 45.6 s. |
+| Running server | `GET /` -> `200`, 44,168 bytes, 354 options, footer `engine: DI=on drums=on NAM=on synth=on` on `127.0.0.1:5000`. |
 | NAM on CUDA | `namamp.device()` = `cuda`; full 52.4 s guitar part rendered in **10.7 s** (~5x realtime) on the 5080. |
 | Numpy amp fallback | Same excerpt with `use_nam=False` in 0.5 s; output differs from NAM. |
 | End-to-end render | Socket.IO test client produced a 9.5 MB WAV in `out/`. |

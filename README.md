@@ -78,6 +78,11 @@ pip install --upgrade torch --index-url https://download.pytorch.org/whl/cu130  
 
 Open http://127.0.0.1:5000. The server binds `0.0.0.0:5000` (Flask dev server; local use).
 
+**First start takes ~30 s** — importing `torch` and initializing CUDA happens before Flask
+binds, so don't assume it failed if the page isn't up immediately. If it never comes up,
+another process may already own port 5000 (a previous `python app.py`); see
+[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
+
 ## Configuration
 
 Paths are anchored to the app file, not the current working directory:
@@ -137,4 +142,5 @@ fall back to the soundfont; no drums -> no drum bus; nothing at all -> a test to
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — request flow, engine modules, render pipeline.
 - [docs/CORPUS.md](docs/CORPUS.md) — corpus layout and `notes.json` schema.
 - [docs/STATUS.md](docs/STATUS.md) — verified-working state with evidence.
+- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — startup, port and asset traps.
 - [docs/CHANGELOG.md](docs/CHANGELOG.md) — change history.

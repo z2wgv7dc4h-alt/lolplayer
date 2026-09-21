@@ -2,6 +2,18 @@
 
 All notable changes to the Riffer Renderer app are recorded here.
 
+## 2026-09-21 (docs)
+
+### Added
+- `docs/TROUBLESHOOTING.md`: stale-process/port-5000 trap, ~30 s startup, engine-stage
+  footer meanings, asset overrides, CUDA torch install, render serialization.
+
+### Changed
+- README "Running" documents the startup delay and port-conflict check; docs index links
+  TROUBLESHOOTING.
+- STATUS records the live server verification (200, 44,168 bytes, 354 options, all engine
+  stages on).
+
 ## 2026-09-21 (expression, bass, preview, tests)
 
 ### Added
