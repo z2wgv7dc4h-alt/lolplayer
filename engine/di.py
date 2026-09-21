@@ -84,12 +84,15 @@ def _load(path: str, rate: int) -> np.ndarray:
 
 
 def _pick(midi: int, string: Optional[float]) -> Optional[Tuple[int, str]]:
+    """Nearest recorded pitch, globally; prefer the same string only as a
+    tie-breaker. (Preferring the string outright detunes badly whenever the
+    tab's string numbering doesn't match the sample library's tuning.)"""
     idx = index()
     if not idx:
         return None
-    same = [e for e in idx if string is not None and e[1] == int(string)]
-    pool = same or idx
-    best = min(pool, key=lambda e: abs(e[0] - midi))
+    want = int(string) if string is not None else None
+    best = min(idx, key=lambda e: (abs(e[0] - midi),
+                                   0 if e[1] == want else 1))
     return best[0], best[2]
 
 

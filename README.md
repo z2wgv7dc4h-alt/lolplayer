@@ -78,9 +78,10 @@ pip install --upgrade torch --index-url https://download.pytorch.org/whl/cu130  
 
 Open http://127.0.0.1:5000. The server binds `0.0.0.0:5000` (Flask dev server; local use).
 
-**First start takes ~30 s** — importing `torch` and initializing CUDA happens before Flask
-binds, so don't assume it failed if the page isn't up immediately. If it never comes up,
-another process may already own port 5000 (a previous `python app.py`); see
+**The first page load takes ~30 s** — Flask binds quickly, but the first request triggers
+`torch`/CUDA initialization (the engine-status check), so don't assume it failed if the
+page is slow on first open. If it never comes up, another process may already own port
+5000 (a previous `python app.py`); see
 [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
 ## Configuration

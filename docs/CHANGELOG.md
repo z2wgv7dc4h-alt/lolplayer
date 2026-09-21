@@ -2,6 +2,21 @@
 
 All notable changes to the Riffer Renderer app are recorded here.
 
+## 2026-09-21 (DI pitch-selection fix)
+
+### Fixed
+- `di._pick` preferred the same string number outright, so any tab whose string
+  numbering didn't match the DI library's tuning grabbed a wildly wrong sample. On a
+  real song **78% of guitar events were detuned by >=4 semitones, up to -23/+31**, which
+  is why guitar (especially through NAM) sounded like garbage. Selection now takes the
+  globally nearest recorded pitch and uses string only as a tie-breaker; max detune is
+  now +/-2 semitones (0 events >=4). Regression tests added in `tests/test_di.py`.
+
+### Changed
+- README/TROUBLESHOOTING/STATUS: corrected the startup note — Flask binds quickly, it is
+  the **first page request** (engine-status check) that initializes torch/CUDA and takes
+  ~30 s.
+
 ## 2026-09-21 (docs)
 
 ### Added

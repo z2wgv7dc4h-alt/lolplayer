@@ -30,7 +30,7 @@ Ported from `riffer`, with asset/tool paths made configurable via `engine/assets
 | `model.py` | `Song` / `Track` / `Event` dataclasses (the canonical song model). |
 | `midi.py` | `tempo_points`, `beat_to_seconds`, `seconds_to_beat`, and MIDI message building. Requires `mido`. |
 | `assets.py` | Resolves `RIFFER_ASSETS` / `RIFFER_TOOLS` (env override, else repo-relative, else auto-detected). |
-| `di.py` | Sampled dry-DI guitar: nearest recorded pitch (preferring same string), repitched; palm-mute shortening. |
+| `di.py` | Sampled dry-DI guitar: nearest recorded pitch globally (same string only as a tie-breaker), repitched; palm-mute/bend/dead/ghost handling. |
 | `drums.py` | Multisampled drums: velocity layers + round-robin, antialiased resampling, per-instrument gain/pan, parallel compression + room IR. |
 | `amp.py` | Numpy-only tube-ish amp + synthesized cabinet IR (fallback when NAM is off/unavailable). |
 | `namamp.py` | NAM amp captures in torch + real cab IR. Device-aware: runs on CUDA when available. |

@@ -30,8 +30,9 @@ The venv `python.exe` can appear as two process ids for one launch; kill both if
 
 ## The page takes ~30 seconds to appear
 
-Not a hang. `torch` import + CUDA initialization happens before Flask binds. Wait, then
-retry. Verify the server is actually listening:
+Not a hang. Flask binds quickly, but the **first page request** triggers `torch`/CUDA
+initialization (the engine-status check on the index page), which can take ~30 s. Wait,
+then retry. Verify the server is actually listening:
 
 ```powershell
 Get-NetTCPConnection -LocalPort 5000 -State Listen
