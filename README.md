@@ -97,12 +97,13 @@ Paths are anchored to the app file, not the current working directory:
 | `APP_DIR` | dir containing `app.py` | base for everything |
 | `ENGINE_DIR` | `APP_DIR/engine` | engine modules, added to `sys.path` |
 | `OUT_DIR` | `APP_DIR/out` | rendered WAVs |
-| `CORPUS_ROOT` | `APP_DIR.parents[1]/bulk/songs` | read-only tab corpus |
-| `ASSETS_DIR` | `RIFFER_ASSETS` env, else `APP_DIR/assets`, else `~/Desktop/god-tier-metal/assets` | `di/ drums/ nam/ cab/` |
-| `TOOLS_DIR` | `RIFFER_TOOLS` env, else `APP_DIR/tools`, else `~/Desktop/god-tier-metal/tools` | `fluidsynth/ soundfonts/` |
+| `CORPUS_ROOT` | `RIFFER_CORPUS` env, else `APP_DIR/corpus/songs` | tab corpus |
+| `ASSETS_DIR` | `RIFFER_ASSETS` env, else `APP_DIR/assets` | `di/ drums/ nam/ cab/` |
+| `TOOLS_DIR` | `RIFFER_TOOLS` env, else `APP_DIR/tools` | `fluidsynth/ soundfonts/` |
 
-Set `RIFFER_ASSETS` / `RIFFER_TOOLS` to point at your own asset/tool locations. The
-engine reads them via `engine/assets.py`.
+Everything is self-contained in this project folder (corpus, assets and tools are
+included and gitignored). Set `RIFFER_CORPUS` / `RIFFER_ASSETS` / `RIFFER_TOOLS` to point
+elsewhere. The engine reads them via `engine/assets.py`.
 
 ## Using the UI
 

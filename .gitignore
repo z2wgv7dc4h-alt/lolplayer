@@ -16,9 +16,14 @@ out/
 *.log
 *.err
 
-# Licensed / user-supplied audio assets (bring your own)
+# Licensed / user-supplied data + assets (bring your own)
+corpus/
+assets/di/
 assets/nam/*.nam
 assets/cab/*.wav
 assets/cab/*.ir
+assets/drums/*.wav
 assets/drums/*.sfz
 assets/drums/**/*.wav
+tools/fluidsynth/
+tools/soundfonts/

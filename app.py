@@ -19,7 +19,7 @@ import soundfile as sf
 APP_DIR = Path(__file__).resolve().parent
 ENGINE_DIR = APP_DIR / "engine"
 OUT_DIR = APP_DIR / "out"
-CORPUS_ROOT = APP_DIR.parents[1] / "bulk" / "songs"
+CORPUS_ROOT = Path(os.environ.get("RIFFER_CORPUS") or (APP_DIR / "corpus" / "songs"))
 
 
 def _detect_dir(env_name, candidates, probe):
@@ -32,16 +32,8 @@ def _detect_dir(env_name, candidates, probe):
     return candidates[0]
 
 
-ASSETS_DIR = _detect_dir(
-    "RIFFER_ASSETS",
-    [APP_DIR / "assets", Path.home() / "Desktop" / "god-tier-metal" / "assets"],
-    "di",
-)
-TOOLS_DIR = _detect_dir(
-    "RIFFER_TOOLS",
-    [APP_DIR / "tools", Path.home() / "Desktop" / "god-tier-metal" / "tools"],
-    "fluidsynth",
-)
+ASSETS_DIR = _detect_dir("RIFFER_ASSETS", [APP_DIR / "assets"], "di")
+TOOLS_DIR = _detect_dir("RIFFER_TOOLS", [APP_DIR / "tools"], "fluidsynth")
 os.environ.setdefault("RIFFER_ASSETS", str(ASSETS_DIR))
 os.environ.setdefault("RIFFER_TOOLS", str(TOOLS_DIR))
 
