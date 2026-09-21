@@ -2,50 +2,58 @@
 
 A small local web app that turns a Songsterr-derived tab corpus into audio and plays
 it back in the browser. Pick a song, hit **Render**, and the server loads the song's
-canonical `notes.json`, synthesizes it to a WAV, optionally runs it through a NAM amp
-capture + cab IR, and streams the result back with a waveform player.
+canonical `notes.json`, renders a real stem mix (sampled drums + DI guitar through a
+NAM amp/cab + FluidSynth for everything else), and streams the result back with a
+waveform player.
 
-This is a single-process Flask + Socket.IO app. The generation/synthesis engine lives
-in `engine/` and is imported at startup.
+Single-process Flask + Socket.IO app. The synthesis engine lives in `engine/`.
 
 ## What it does
 
 - Scans a shared, read-only tab corpus and lists every song (artist / title).
-- Loads each song's flattened `notes.json` event stream.
-- Renders note events to mono 44.1 kHz audio using a tempo map (honours mid-song
-  tempo changes) and an absolute-time (`onset_ms`/`duration_ms`) fast path.
-- Optionally processes the result through **Neural Amp Modeler** (`engine/namamp_integrated.py`)
-  plus a cab IR.
+- Loads each song's flattened `notes.json` event stream (tracks, tunings, tempo map,
+  articulation).
+- Renders a **stem mix**:
+  - **Drums** — multisampled kit from `assets/drums/`, velocity layers, round-robin,
+    per-instrument gain/pan, parallel compression + short room.
+  - **Guitar** — sampled dry DI from `assets/di/` (nearest sample, repitched) through
+    either a **NAM** capture + real cab IR, or a built-in numpy amp/cab when NAM is off.
+  - **Everything else** (bass, keys, ...) — FluidSynth via `libfluidsynth`, loaded once
+    per process with a soundfont.
+- Uses **CUDA** automatically for the NAM stage when a CUDA-enabled torch is installed.
 - Serves audio over HTTP with byte-range support so the browser player can seek.
 
 ## Requirements
 
 - Python 3.12+
-- A tab corpus in the layout described in [docs/CORPUS.md](docs/CORPUS.md)
-- Optional: NAM + cab assets for amp/cab processing
+- A tab corpus (see [docs/CORPUS.md](docs/CORPUS.md))
+- Assets: `di/ drums/ nam/ cab/` and tools: `fluidsynth/ soundfonts/` (see below)
 
-Core Python packages (versions from the development environment):
+Python packages — see [requirements.txt](requirements.txt). Key ones:
 
 ```
-Flask==3.1.3
-Flask-SocketIO==5.6.1
-numpy==2.5.3
-soundfile==0.14.0
-python-socketio==5.17.0
-python-engineio==4.14.0
-# optional, only for NAM processing
-torch==2.14.0
-scipy==1.18.1
+Flask, Flask-SocketIO, numpy, soundfile, scipy, mido
+torch + neural-amp-modeler   # NAM amp stage
 ```
+
+### CUDA torch (for fast NAM)
+
+The default PyPI `torch` is CPU-only. For GPU NAM on an RTX 50-series / CUDA 13 driver:
+
+```powershell
+pip install --upgrade torch --index-url https://download.pytorch.org/whl/cu130
+```
+
+`engine/namamp.py` picks `cuda` when `torch.cuda.is_available()`, else `cpu` — no config
+needed. On this machine a 52 s guitar part renders in ~11 s on the 5080 (~5x realtime).
 
 ## Setup
 
 ```powershell
 python -m venv venv
 .\venv\Scripts\Activate.ps1
-pip install flask flask-socketio numpy soundfile
-# optional, for amp/cab processing:
-pip install torch scipy
+pip install -r requirements.txt
+pip install --upgrade torch --index-url https://download.pytorch.org/whl/cu130   # optional GPU
 ```
 
 ## Running
@@ -54,54 +62,62 @@ pip install torch scipy
 .\venv\Scripts\python.exe app.py
 ```
 
-Then open http://127.0.0.1:5000 in a browser.
-
-The server binds `0.0.0.0:5000` (LAN-accessible). It is the Flask development server —
-fine for local use, not intended for public exposure.
+Open http://127.0.0.1:5000. The server binds `0.0.0.0:5000` (Flask dev server; local use).
 
 ## Configuration
 
-Paths are anchored to the app file, **not** the current working directory:
+Paths are anchored to the app file, not the current working directory:
 
-| Constant | Value | Purpose |
+| Constant | Default | Purpose |
 | --- | --- | --- |
-| `APP_DIR` | directory containing `app.py` | base for everything else |
-| `ENGINE_DIR` | `APP_DIR/engine` | added to `sys.path` |
+| `APP_DIR` | dir containing `app.py` | base for everything |
+| `ENGINE_DIR` | `APP_DIR/engine` | engine modules, added to `sys.path` |
 | `OUT_DIR` | `APP_DIR/out` | rendered WAVs |
 | `CORPUS_ROOT` | `APP_DIR.parents[1]/bulk/songs` | read-only tab corpus |
+| `ASSETS_DIR` | `RIFFER_ASSETS` env, else `APP_DIR/assets`, else `~/Desktop/god-tier-metal/assets` | `di/ drums/ nam/ cab/` |
+| `TOOLS_DIR` | `RIFFER_TOOLS` env, else `APP_DIR/tools`, else `~/Desktop/god-tier-metal/tools` | `fluidsynth/ soundfonts/` |
 
-The NAM engine's asset directories are repointed to `APP_DIR/assets/nam` and
-`APP_DIR/assets/cab`, so it works regardless of launch directory.
-
-To use a different corpus, edit `CORPUS_ROOT` in `app.py`.
+Set `RIFFER_ASSETS` / `RIFFER_TOOLS` to point at your own asset/tool locations. The
+engine reads them via `engine/assets.py`.
 
 ## Using the UI
 
-1. Choose a song from the dropdown.
-2. Click **Render**. The button disables while a queued job is processed.
-3. When it completes, the waveform loads automatically; use **Play** to listen.
-
-The **Amp Drive** slider is currently a UI stub — it is not yet wired into the render.
+1. Choose a song.
+2. Optionally tick **NAM amp (slow)** and pick an amp capture + cab IR.
+3. Set **Drive** (amp gain into the distortion) and **Gain** (bus level).
+4. **Render**. The button disables while the queued job runs; the waveform loads on
+   completion. The footer shows which engine stages are available.
 
 ## Assets
 
-`assets/nam/*.nam` captures and cab IRs are **not** committed: they are licensed
-per-capture and should be supplied by the user. Drop your own files into
-`assets/nam/`, `assets/cab/` and (for the drum kit) `assets/drums/`. The amp capture
-requested by the UI defaults to `wavenet_a1_standard`; if absent, the engine falls
-back to the first available capture with a matching name, or the first `.nam` found.
+`assets/nam/*.nam`, cab IRs, DI samples and the drum samples are **not** committed — they
+are licensed per-capture / per-library and must be supplied by you. Layout:
+
+```
+assets/
+  di/      <Note>_s<string>_<take>.wav        dry DI guitar samples
+  drums/   <midi>-<kit><instrument>-<take>.wav
+  nam/     *.nam                              amp captures
+  cab/     *.wav                              cabinet impulse responses
+tools/
+  fluidsynth/bin/libfluidsynth-3.dll
+  soundfonts/MuseScore_General.sf3
+```
+
+If a stage's assets are missing the renderer degrades gracefully (e.g. no DI -> guitars
+fall back to the soundfont; no drums -> no drum bus; nothing at all -> a test tone).
 
 ## Limitations
 
-- Synthesis is currently a placeholder oscillator (one sine per note event), not a
-  guitar/drum instrument synth. It is correct in timing, pitch and velocity but does
-  not yet sound like the source.
-- NAM processing a full 5-minute song is slow (WaveNet inference over millions of
-  samples). Renders are queued and processed one at a time by a single worker thread.
-- No tests yet.
+- NAM is CPU-bound unless a CUDA torch is installed; the full song is still serialized
+  through one worker thread.
+- Guitar is a sampler (nearest DI sample repitched), not a physical model.
+- Render request queue is unbounded; large songs are processed one at a time.
+- No automated tests yet.
 
 ## Documentation
 
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — request/response flow, modules, socket API.
-- [docs/CORPUS.md](docs/CORPUS.md) — on-disk layout and `notes.json` schema.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — request flow, engine modules, render pipeline.
+- [docs/CORPUS.md](docs/CORPUS.md) — corpus layout and `notes.json` schema.
+- [docs/STATUS.md](docs/STATUS.md) — verified-working state with evidence.
 - [docs/CHANGELOG.md](docs/CHANGELOG.md) — change history.

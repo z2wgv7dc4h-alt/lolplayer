@@ -107,5 +107,5 @@ them directly. If a file lacks the ms fields, `render_song` builds a cumulative
 beat-to-seconds map from the per-event `tempo_bpm` values instead.
 
 `raw/song.json` is the unflattened Songsterr model (measures, per-track `volume`/
-`balance`, effects). It is **not** read by this renderer; it is the source for other
-tools that build `notes.json`.
+`balance`, effects). The renderer reads only its per-track `volume`/`balance`
+(`_attach_mix`) to seed the mix; the note data comes entirely from `notes.json`.

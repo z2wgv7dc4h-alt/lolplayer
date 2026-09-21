@@ -2,6 +2,32 @@
 
 All notable changes to the Riffer Renderer app are recorded here.
 
+## 2026-09-21 (engine integration)
+
+### Added
+- Full stem synthesis engine ported into `engine/`: `model.py`, `midi.py`, `di.py`,
+  `drums.py`, `amp.py`, `namamp.py`, `fastsynth.py`, `synth.py`, plus `assets.py`.
+- Real drum rendering (multisampled, velocity layers, round-robin, bus treatment).
+- Sampled dry-DI guitar -> NAM amp + real cab IR (or numpy amp fallback).
+- FluidSynth (`libfluidsynth` via ctypes) rendering of non-guitar tracks.
+- Configurable asset/tool roots via `RIFFER_ASSETS` / `RIFFER_TOOLS` with auto-detection
+  of `~/Desktop/god-tier-metal/{assets,tools}`.
+- CUDA support in the NAM stage: torch model and chunks run on the GPU when available.
+- UI controls for NAM toggle, amp capture, cab IR, drive and gain; engine-status footer.
+- `requirements.txt`.
+- `mido` dependency (tempo map / message building).
+
+### Changed
+- `render_song` now produces a stereo stem mix instead of a per-event sine oscillator.
+- `app.py` uses the engine's `model.Song`/`Track`/`Event` instead of local dataclasses.
+- `engine/namamp_integrated.py` removed; superseded by the ported `engine/namamp.py`.
+- Torch upgraded from `2.14.0+cpu` to `2.14.0+cu130` for GPU NAM.
+
+### Fixed
+- `/audio/<filename>` returned 404 for long slugs because the name was sanitized and
+  truncated twice (once when written, again when served). The route now validates the
+  literal name instead of re-truncating it.
+
 ## 2026-09-21
 
 ### Added

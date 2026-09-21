@@ -1,101 +1,100 @@
 # Architecture
 
-`app.py` is a single module containing the web layer, the corpus loader, the render
-pipeline and the background worker. The synthesis/amp engine lives in `engine/` and is
-imported into the module namespace.
+`app.py` is the web layer + corpus loader + worker. The audio engine lives in
+`engine/` and is a port of the sibling `riffer` project's synthesis stack.
 
 ## Data flow
 
 ```
-browser  --socket: render_request-->  on_render()  --job-->  render_queue
-                                                              |
-                                              worker_render() (single thread)
-                                                              |
-                                       load_song() -> notes.json -> Song
-                                                              |
-                                       render_song() -> float32 audio
-                                                              |
-                                       soundfile.write() -> out/<file>.wav
-                                                              |
-browser  <--socket: render_complete {filename}----------------+
-         <--socket: render_error    {error,traceback}--------+
+browser --socket: render_request--> on_render() --job--> render_queue
+                                                          |
+                                        worker_render() (single thread)
+                                                          |
+                                load_song() -> notes.json -> model.Song
+                                                          |
+                                render_song() -> stem buses -> mix (Nx2 float32)
+                                                          |
+                                soundfile.write() -> out/<file>.wav
+                                                          |
+browser <--socket: render_complete {filename}-------------+
+        <--socket: render_error    {error,traceback}-----+
+        --GET /audio/<filename> (range)--+
 ```
 
-The browser then requests `GET /audio/<filename>`, served with HTTP range support.
+## Engine modules (`engine/`)
 
-## Components
+Ported from `riffer`, with asset/tool paths made configurable via `engine/assets.py`.
 
-### Corpus layer
+| Module | Responsibility |
+| --- | --- |
+| `model.py` | `Song` / `Track` / `Event` dataclasses (the canonical song model). |
+| `midi.py` | `tempo_points`, `beat_to_seconds`, `seconds_to_beat`, and MIDI message building. Requires `mido`. |
+| `assets.py` | Resolves `RIFFER_ASSETS` / `RIFFER_TOOLS` (env override, else repo-relative, else auto-detected). |
+| `di.py` | Sampled dry-DI guitar: nearest recorded pitch (preferring same string), repitched; palm-mute shortening. |
+| `drums.py` | Multisampled drums: velocity layers + round-robin, antialiased resampling, per-instrument gain/pan, parallel compression + room IR. |
+| `amp.py` | Numpy-only tube-ish amp + synthesized cabinet IR (fallback when NAM is off/unavailable). |
+| `namamp.py` | NAM amp captures in torch + real cab IR. Device-aware: runs on CUDA when available. |
+| `fastsynth.py` | Persistent `libfluidsynth` via ctypes; renders non-guitar tracks from a soundfont. |
+| `synth.py` | Orchestration helpers: `_stem_tracks`, `_subsong`, `_sum_buses`, `find_soundfont`, `find_fluidsynth`, `category_of`. |
 
-- `load_songs(force=False)` — returns the cached list of `{slug, artist, title, path}`.
-  Discovery globs `CORPUS_ROOT/*/*/notes.json` and skips any path containing `(old)`.
-  Results are cached for `_SONGS_TTL` seconds behind a lock to avoid re-reading every
-  song file on each page load.
-- `_safe_song_dir(artist, slug)` — resolves `CORPUS_ROOT/<artist>/<slug>` and rejects
-  any path that escapes the corpus or contains separators / NUL. This is the
-  path-traversal guard for both rendering and the file server.
-- `load_song(artist, slug)` — parses `notes.json` into `Song`/`Track`/`Event`. Track
-  channels skip the drum channel (9); GM programs are clamped (1024 -> 0).
+### Asset/tool resolution (`assets.py`)
 
-### Timing layer
+`assets_root()` returns `RIFFER_ASSETS` if set, else `<repo>/assets`. `tools_root()`
+returns `RIFFER_TOOLS` if set, else `<repo>/tools`. `app.py` detects a valid root
+(`RIFFER_ASSETS` env, then `APP_DIR/assets`, then `~/Desktop/god-tier-metal/assets`,
+probed on `di/`; tools probed on `fluidsynth/`) and exports it via `os.environ` **before**
+importing the engine modules (which read the paths at import time).
 
-`notes.json` carries both musical time (`onset_beat`, `duration_beats`, `tempo_bpm`)
-and absolute time (`onset_ms`, `duration_ms`). Rendering prefers absolute time when
-present.
+### Timing
 
-- `_tempo_map(events)` — builds a cumulative `beat -> seconds` map from the sequence of
-  tempo changes in the event stream. Values are `(start_beat, seconds_at_start, bpm)`.
-- `_beat_to_sec(beat, tm)` — integrates within the active segment.
-- `render_song()` uses `onset_ms/1000` when available, falling back to the tempo map.
-  The output buffer is sized from the final event's end time plus a 0.25 s tail, so no
-  event is silently dropped.
+`midi.tempo_points(song)` builds the tempo map from per-event `tempo_bpm`; `beat_to_seconds`
+integrates across it. `model.Song.duration_beats()` is the max `onset_beat + duration_beats`.
+The DI/drum renderers size their buffers from `duration_beats + tail`.
 
-### Render layer
+### Rendering (`app.render_song`)
 
-`render_song(song, amp_name, cab_name)`:
+1. Split tracks into drums / guitars / others via `synth._stem_tracks`
+   (`category_of`: 24-31 = guitar, 32-39 = bass, 0-7 = keys).
+2. **Others** -> `fastsynth.render_array` (skipped if libfluidsynth/soundfont absent).
+3. **Guitars** -> `di.render` (dry DI). If no DI assets, fall back to the soundfont.
+   The DI goes through `_guitar_bus`, which runs NAM+cab when `use_nam`, else the numpy
+   `amp.amp` with a real cab IR if one exists.
+4. **Drums** -> `drums.render` (skipped if no samples).
+5. Sum with `synth._sum_buses` (normalizes to 0.95 peak). If no bus produced anything,
+   fall back to a 5 s test tone.
 
-1. Returns a 5 s test sine if the song has no events.
-2. Allocates a mono `float32` buffer at 44.1 kHz.
-3. For each event, adds a sine at the note's equal-tempered frequency, amplitude scaled
-   by velocity (`velocity/127 * 0.3`).
-4. Normalizes to 0.9 peak.
-5. If `namamp` imported successfully, an `amp_name` was supplied and a capture is
-   available, runs `namamp.process(signal, rate, name, cab_name)`.
+`_guitar_bus` adds a small right-channel delay for width, matching the sibling project.
 
-### Worker layer
+### NAM device selection (`namamp.py`)
 
-`worker_render()` is an infinite loop consuming `render_queue`. Each job is a dict
-carrying the requester's Socket.IO session id (`_sid`). Results are emitted **to that
-sid only**, so concurrent clients never receive each other's waveforms. Exceptions are
-returned to the client as `render_error` with a traceback string.
+- `device()` returns `cuda` if `torch.cuda.is_available()`, else `cpu`.
+- `load()` moves the model to that device once and caches it (`_DEVICES`).
+- `process()` resamples to 48 kHz, normalizes input RMS, runs the model in 4 s chunks
+  under `torch.inference_mode()`, moving each chunk to the device and the result back,
+  then resamples to the render rate and convolves the cab IR.
 
-The worker thread is started only under `if __name__ == '__main__'`.
-
-### Web layer
+## Web layer
 
 | Route / event | Description |
 | --- | --- |
-| `GET /` | HTML page with the song `<select>` and player. Song options are HTML-escaped. |
-| `GET /audio/<filename>` | Serves a rendered WAV from `OUT_DIR` with `conditional=True` (range requests). Filename is sanitized and confined to `OUT_DIR`. |
-| `socket render_request` | Validates `artist`/`slug` are strings, enqueues a job tagged with `request.sid`, replies `render_started`. |
-| `socket render_complete` | `{filename}` — emitted to the requesting client. |
-| `socket render_error` | `{error}` — emitted to the requesting client. |
+| `GET /` | HTML page: song `<select>`, NAM/amp/cab/drive/gain controls, engine-status footer. All option text HTML-escaped. |
+| `GET /audio/<filename>` | Serves a WAV from `OUT_DIR` with `conditional=True` (range requests). Name must match `[A-Za-z0-9_.-]+`, contain no `..`, and stay inside `OUT_DIR`. |
+| `socket render_request` | Validates `artist`/`slug` strings; enqueues a job (with `use_nam`, `amp_name`, `cab_name`, `drive`, `gain`) tagged with `request.sid`; replies `render_started`. |
+| `socket render_complete` | `{filename}` to the requesting client. |
+| `socket render_error` | `{error}` to the requesting client. |
 
-## NAM engine (`engine/namamp_integrated.py`)
+### Corpus layer
 
-- `available()` — true if any `*.nam` exists in `NAM_DIR`.
-- `load_nam(name)` — loads and caches an NAM model, patching head layers if needed.
-- `process(di, rate, name, cab_name)` — resamples to 48 kHz, normalizes input RMS,
-  runs the model in overlapping chunks, resamples back, optionally convolves with a cab
-  IR (`fftconvolve`), and normalizes.
+- `load_songs(force)` — cached (`_SONGS_TTL`) scan of `CORPUS_ROOT/*/*/notes.json`,
+  skipping `(old)`.
+- `_safe_song_dir(artist, slug)` — path-traversal guard (rejects separators/`..`/escape).
+- `load_song(artist, slug)` — builds a `model.Song` from `notes.json`; `_attach_mix`
+  pulls per-track `volume`/`balance` from `raw/song.json` when present.
 
-The app overrides `namamp.NAM_DIR`/`namamp.CAB_DIR` to absolute paths at import time so
-the engine does not depend on the working directory.
+The worker emits results to the job's originating `sid`, so concurrent clients don't
+receive each other's audio.
 
-## Concurrency and robustness notes
+## Concurrency
 
-- Single worker thread -> renders are serialized. The queue is unbounded; a long queue
-  is possible if many large songs are requested.
-- `load_song` and `_safe_song_dir` are safe against hostile artist/slug values.
-- The page cache is process-local and expires after `_SONGS_TTL`; editing the corpus is
-  picked up automatically within a few seconds.
+One worker thread -> renders are serialized. The queue is unbounded. The song-list cache
+is process-local and expires after 5 s.
