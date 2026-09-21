@@ -17,12 +17,15 @@ Single-process Flask + Socket.IO app. The synthesis engine lives in `engine/`.
   - **Drums** — multisampled kit from `assets/drums/`, velocity layers, round-robin,
     per-instrument gain/pan, parallel compression + short room.
   - **Guitar** — sampled dry DI from `assets/di/` (nearest sample, repitched) through
-    either a **NAM** capture + real cab IR, or a built-in numpy amp/cab when NAM is off.
-    Applies **expression**: bends (from `raw/song.json`), palm-mute, dead/ghost/hammer
-    notes and staccato.
+    a **noise gate** and a **Tube-Screamer-style boost** (ported from `riff_engine.py`),
+    then either a **NAM** capture + real cab IR or a built-in numpy amp/cab. Applies
+    **expression**: bends (from `raw/song.json`), palm-mute, dead/ghost/hammer notes
+    and staccato.
   - **Bass** — rendered from the soundfont, then run through a bass amp/cab stage.
   - **Everything else** (keys, ...) — FluidSynth via `libfluidsynth`, loaded once per
     process with a soundfont.
+- **Gain staging + master limiter** — buses are summed at fixed relative gains and
+  limited to -0.5 dBFS (no more independent per-bus peak-normalizing).
 - **Preview renders** — limit a render to the first 30/45/60 s to hear a result quickly.
 - Uses **CUDA** automatically for the NAM stage when a CUDA-enabled torch is installed.
 - Serves audio over HTTP with byte-range support so the browser player can seek.
@@ -103,8 +106,8 @@ engine reads them via `engine/assets.py`.
 ## Using the UI
 
 1. Choose a song.
-2. Optionally tick **NAM amp (slow)** and pick an amp capture + cab IR.
-3. Set **Drive** (amp gain into the distortion) and **Gain** (bus level).
+2. Optionally tick **NAM amp (slow)**, keep **Boost** ticked, and pick an amp capture + cab IR.
+3. Set **Drive** (boost amount when NAM is on; amp distortion when off) and **Gain** (bus level).
 4. Pick a **Length** (full song or a first-N-seconds preview).
 5. **Render**. The button disables while the queued job runs; the waveform loads on
    completion. The footer shows which engine stages are available.

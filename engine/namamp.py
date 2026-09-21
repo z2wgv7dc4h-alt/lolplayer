@@ -129,8 +129,11 @@ def _to_rate(x: np.ndarray, src: int, dst: int) -> np.ndarray:
 
 
 def process(di: np.ndarray, rate: int, name: Optional[str] = None,
-            cab_name: Optional[str] = None) -> np.ndarray:
-    """DI (mono float32) -> amped + cab-filtered guitar (mono float32)."""
+            cab_name: Optional[str] = None, drive: float = 0.0) -> np.ndarray:
+    """DI (mono float32) -> amped + cab-filtered guitar (mono float32).
+
+    ``drive`` is extra input gain in dB applied after level matching, to push
+    a low-gain capture harder."""
     import torch
     model = load(name)
     if model is None:
@@ -138,6 +141,8 @@ def process(di: np.ndarray, rate: int, name: Optional[str] = None,
     x = di.astype(np.float32)
     rms = float(np.sqrt(np.mean(x ** 2)) + 1e-9)
     x = x * (0.1 / rms)                       # consistent input level
+    if drive:
+        x = x * (10.0 ** (float(drive) / 20.0))
     x48 = _to_rate(x, rate, NAM_RATE)
     rf = int(getattr(model, "receptive_field", 0))
     step = NAM_RATE * 4

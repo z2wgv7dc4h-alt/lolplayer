@@ -53,6 +53,7 @@ import fastsynth              # noqa: E402
 import model                  # noqa: E402
 import namamp                 # noqa: E402
 import synth                  # noqa: E402
+import tone                   # noqa: E402
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
@@ -259,12 +260,16 @@ def _attach_expression(song, song_dir):
                             event.accentuated = True
 
 
-def _guitar_bus(di_audio, rate, use_nam, amp_name, cab_name, drive):
+def _guitar_bus(di_audio, rate, use_nam, amp_name, cab_name, drive, boost_on=False):
     mono = di_audio.mean(axis=1) if getattr(di_audio, "ndim", 1) > 1 else di_audio
+    src = tone.noise_gate(mono, rate)
+    if boost_on:
+        src = tone.boost(src, rate, drive=max(1.0, drive))
     proc = None
     if use_nam and namamp.available():
         try:
-            proc = namamp.process(mono, rate, name=amp_name, cab_name=cab_name)
+            proc = namamp.process(src, rate, name=amp_name, cab_name=cab_name,
+                                  drive=6.0 if boost_on else 0.0)
         except Exception:
             proc = None
     if proc is None:
@@ -277,7 +282,7 @@ def _guitar_bus(di_audio, rate, use_nam, amp_name, cab_name, drive):
             cab = None
         if cab is None:
             cab = ampmod.cabinet_ir(rate)
-        proc = ampmod.amp(mono, rate, drive=drive, cab=cab)
+        proc = ampmod.amp(src, rate, drive=drive, cab=cab)
     delay = int(0.008 * rate)
     right = np.concatenate([np.zeros(delay, dtype=np.float32), proc])[:len(proc)]
     return np.stack([proc, right], axis=1).astype(np.float32)
@@ -298,7 +303,7 @@ def _placeholder_tone(rate=44100):
 
 
 def render_song(song, rate=44100, use_nam=False, amp_name=None, cab_name=None,
-                drive=14.0, gain=0.5):
+                drive=14.0, gain=0.5, boost=False):
     if not song or not song.events:
         return _placeholder_tone(rate), rate
 
@@ -308,13 +313,14 @@ def render_song(song, rate=44100, use_nam=False, amp_name=None, cab_name=None,
     bass_idx = {t.index for t in otracks if synth.category_of(t) == "bass"}
     bass = [t for t in otracks if t.index in bass_idx]
     other = [t for t in otracks if t.index not in bass_idx]
-    buses = []
+    buses, gains = [], []
 
     if other and can_synth:
         try:
             buses.append(fastsynth.render_array(
                 synth._subsong(song, other), sf2, mix=False, rate=rate,
                 gain=gain, normalize=False))
+            gains.append(0.6)
         except Exception:
             pass
 
@@ -325,6 +331,7 @@ def render_song(song, rate=44100, use_nam=False, amp_name=None, cab_name=None,
                 gain=gain, normalize=False)
             if bbus is not None and len(bbus):
                 buses.append(_bass_bus(bbus, rate))
+                gains.append(1.0)
         except Exception:
             pass
 
@@ -344,20 +351,23 @@ def render_song(song, rate=44100, use_nam=False, amp_name=None, cab_name=None,
             except Exception:
                 di_bus = None
         if di_bus is not None and len(di_bus):
-            buses.append(_guitar_bus(di_bus, rate, use_nam, amp_name, cab_name, drive))
+            buses.append(_guitar_bus(di_bus, rate, use_nam, amp_name, cab_name,
+                                     drive, boost_on=boost))
+            gains.append(0.85)
 
     if dtracks and drums.available():
         try:
             dbus = drums.render(song, rate=rate, gain=0.9)
             if dbus is not None and len(dbus):
                 buses.append(dbus)
+                gains.append(0.95)
         except Exception:
             pass
 
-    buses = [b for b in buses if b is not None and len(b)]
-    if not buses:
+    keep = [(b, g) for b, g in zip(buses, gains) if b is not None and len(b)]
+    if not keep:
         return _placeholder_tone(rate), rate
-    return synth._sum_buses(buses), rate
+    return tone.mix_buses([b for b, _ in keep], [g for _, g in keep], sr=rate), rate
 
 
 def _sanitize_filename(name):
@@ -378,6 +388,7 @@ def worker_render():
             drive = float(params.get("drive") or 14.0)
             gain = float(params.get("gain") or 0.5)
             preview = float(params.get("preview") or 0.0)
+            boost = bool(params.get("boost"))
 
             song = load_song(artist, slug)
             if not song:
@@ -387,7 +398,7 @@ def worker_render():
                     song = synth.trim_song(song, preview)
                 audio, rate = render_song(song, rate=44100, use_nam=use_nam,
                                           amp_name=amp_name, cab_name=cab_name,
-                                          drive=drive, gain=gain)
+                                          drive=drive, gain=gain, boost=boost)
                 filename = f"{_sanitize_filename(slug)[:60]}_{uuid.uuid4().hex[:8]}.wav"
                 OUT_DIR.mkdir(parents=True, exist_ok=True)
                 sf.write(str(OUT_DIR / filename), audio, rate, subtype="PCM_16")
@@ -465,6 +476,7 @@ def index():
         </div>
         <div>
             <label class="inline"><input type="checkbox" id="useNam"> NAM amp (slow)</label>
+            <label class="inline"><input type="checkbox" id="boost" checked> Boost (overdrive)</label>
             <select id="ampSelect">__AMP_OPTS__</select>
             <select id="cabSelect">__CAB_OPTS__</select>
         </div>
@@ -513,6 +525,7 @@ def index():
                     artist: value.slice(0, idx),
                     slug: value.slice(idx + 2),
                     use_nam: document.getElementById('useNam').checked,
+                    boost: document.getElementById('boost').checked,
                     amp_name: document.getElementById('ampSelect').value || null,
                     cab_name: document.getElementById('cabSelect').value || null,
                     drive: parseFloat(document.getElementById('drive').value),
@@ -582,6 +595,7 @@ def on_render(data):
         'drive': data.get('drive'),
         'gain': data.get('gain'),
         'preview': data.get('preview'),
+        'boost': bool(data.get('boost')),
         '_sid': request.sid,
     }
     render_queue.put(job)

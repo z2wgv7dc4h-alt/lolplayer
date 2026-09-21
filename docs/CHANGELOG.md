@@ -2,6 +2,28 @@
 
 All notable changes to the Riffer Renderer app are recorded here.
 
+## 2026-09-21 (tone: boost, gate, mix staging)
+
+### Added
+- `engine/tone.py`: `tube_distort` (asymmetric tube waveshaper) and `noise_gate`
+  ported from `ww-forge-prior-attempt/engine/riff_engine.py` (itself from rust-beats,
+  MIT); plus a Tube-Screamer-style `boost` (low cut + mid hump + asymmetric clip +
+  tone), `master_limit`, and `mix_buses`.
+- `namamp.process(..., drive=dB)`: extra NAM input gain.
+- UI: **Boost (overdrive)** toggle (default on). `Drive` now drives the boost when NAM
+  is on, and the numpy amp otherwise.
+
+### Changed
+- `_guitar_bus` runs the DI through the noise gate + optional boost before the amp.
+- `render_song` sums buses at fixed relative gains (drums 0.95 / guitar 0.85 / bass 1.0
+  / other 0.6) and applies a master limiter instead of independently peak-normalizing
+  each bus via `synth._sum_buses`.
+
+### Fixed
+- The "noboost" captures + no boost stage made guitar thin; there is now a real
+  overdrive stage in front, and the bass is no longer buried under independently
+  normalized buses.
+
 ## 2026-09-21 (DI pitch-selection fix)
 
 ### Fixed
